@@ -40,8 +40,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 .section-title { font-size: 12px; color: var(--text-dim); margin: 6px 0 10px; text-transform: uppercase; letter-spacing: .04em; }
 
-/* Pads */
-.pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 520px; margin-bottom: 20px; }
+/* Barra lateral de pads, siempre visible */
+.pad-sidebar { width: 196px; flex-shrink: 0; background: var(--bg-alt); border-right: 1px solid var(--border); padding: 12px; overflow-y: auto; }
+.pad-sidebar-title { font-size: 11px; color: var(--text-dim); letter-spacing: .08em; margin-bottom: 10px; }
+.pad-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .pad-cell {
   aspect-ratio: 1; border-radius: 8px; background: var(--panel); border: 2px solid var(--border);
   display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; cursor: pointer; user-select: none;
@@ -49,14 +51,17 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 .pad-cell.selected { border-color: var(--pad-color, var(--accent)); }
 .pad-cell.hit { background: var(--pad-color, var(--accent)); }
-.pad-label { font-size: 11px; color: var(--text-dim); }
-.pad-sample-name { font-size: 10px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pad-label { font-size: 10px; color: var(--text-dim); }
+.pad-sample-name { font-size: 9px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.step-grid { display: flex; flex-direction: column; gap: 2px; }
-.step-row { display: flex; align-items: center; gap: 6px; }
-.step-row-label { width: 110px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid var(--pad-color, var(--accent)); padding-left: 6px; }
-.step-cells { display: flex; gap: 2px; }
-.step-cell { width: 18px; height: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
+/* Rack central estilo FL: todos los tracks iguales, con su grid de pasos */
+.rack { display: flex; flex-direction: column; gap: 3px; }
+.rack-row { display: flex; align-items: center; gap: 8px; border-left: 3px solid var(--pad-color, var(--accent)); background: var(--panel); border-radius: 4px; padding: 4px 8px; }
+.rack-row-header { display: flex; align-items: center; gap: 6px; width: 150px; flex-shrink: 0; }
+.rack-row-name { font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.add-synth-btn { margin-top: 10px; }
+.step-cells { display: flex; gap: 2px; flex-wrap: wrap; }
+.step-cell { width: 18px; height: 18px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
 .step-cell.beat { border-left: 2px solid #3a4254; }
 .step-cell.on { background: var(--pad-color, var(--accent)); }
 .step-cell.playhead { outline: 2px solid #fff; }
@@ -79,6 +84,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .rec-target { margin-bottom: 10px; font-size: 12px; color: var(--text-dim); display: flex; gap: 8px; align-items: center; }
 .rec-waveform { background: #1b1f2a; border: 1px solid var(--border); border-radius: 6px; width: 100%; max-width: 900px; height: 160px; }
 .rec-sync { margin-top: 10px; display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
+.rec-timer { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 13px; }
+.rec-btn.active { background: #ff5d73; color: #0a0d12; }
+.rec-info { margin-top: 12px; display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
 
 /* Mute/secciones */
 .scene-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -111,5 +119,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 @media (max-width: 720px) {
   .inspector { display: none; }
-  .pad-grid { max-width: 100%; }
+  .pad-sidebar { width: 140px; }
+  .rack-row-header { width: 100px; }
 }

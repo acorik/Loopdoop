@@ -1,19 +1,28 @@
 // UI: cabecera/transporte, pestañas de modo, panel inspector, MIDI learn, guardado/carga.
 const UI = (() => {
-  let currentMode = 'pads';
+  let currentMode = 'rack';
   const modes = {
-    pads: ModePads, piano: ModePianoRoll, record: ModeRecord, mute: ModeMute, mixer: Mixer
+    rack: ModeRack, piano: ModePianoRoll, record: ModeRecord, mute: ModeMute, mixer: Mixer
   };
 
   function init() {
     buildHeader();
     buildTabs();
+    PadSidebar.render(document.getElementById('pad-sidebar'));
     renderMode();
     bindMidi();
     Sequencer.init();
 
     document.addEventListener('scene:changed', renderMode);
+    document.addEventListener('sample:loaded', () => PadSidebar.render(document.getElementById('pad-sidebar')));
     document.getElementById('app-root').addEventListener('click', () => AudioEngine.resume(), { once: true });
+  }
+
+  function gotoPianoRoll(track) {
+    currentMode = 'piano';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'piano'));
+    ModePianoRoll.selectTrack(track);
+    renderMode();
   }
 
   function buildHeader() {
@@ -98,7 +107,7 @@ const UI = (() => {
   function buildTabs() {
     const tabs = document.getElementById('tabs');
     tabs.innerHTML = `
-      <button class="tab-btn active" data-mode="pads">Drum Pad</button>
+      <button class="tab-btn active" data-mode="rack">Rack</button>
       <button class="tab-btn" data-mode="piano">Piano Roll</button>
       <button class="tab-btn" data-mode="record">Grabar</button>
       <button class="tab-btn" data-mode="mute">Mute/Secciones</button>
@@ -166,7 +175,7 @@ const UI = (() => {
   }
 
   function bindMidi() {
-    Midi.onNote = (note, vel, isOn) => ModePads.handleMidiNote(note, vel, isOn);
+    Midi.onNote = (note, vel, isOn) => PadSidebar.handleMidiNote(note, vel, isOn);
     Midi.onCC = (cc, val) => {
       const idx = Midi.knobIndexFromCC(cc);
       if (idx < 0) return;
@@ -178,5 +187,5 @@ const UI = (() => {
     };
   }
 
-  return { init, renderInspector };
+  return { init, renderInspector, gotoPianoRoll };
 })();

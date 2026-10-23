@@ -1,12 +1,15 @@
-// Modo Grabación: captura por micrófono, recorte, y ajuste automático al BPM del proyecto.
+// Modo Grabación: un botón graba lo que quieras, al parar se ajusta solo al grid y se asigna al pad. Pa'lante.
 const ModeRecord = (() => {
   let root = null;
   let stream = null;
   let recorder = null;
   let chunks = [];
   let lastBuffer = null;
-  let trimStart = 0, trimEnd = 0;
+  let lastInfo = null;
   let targetTrack = null;
+  let recording = false;
+  let recStartTime = 0;
+  let timerInterval = null;
 
   function render(container) {
     root = container;
@@ -16,17 +19,17 @@ const ModeRecord = (() => {
     const bar = document.createElement('div');
     bar.className = 'rec-toolbar';
 
-    const armBtn = document.createElement('button');
-    armBtn.className = 'mini-btn';
-    armBtn.textContent = '🎙 Activar micro';
-    armBtn.onclick = arm;
-    bar.appendChild(armBtn);
-
     const recBtn = document.createElement('button');
-    recBtn.className = 'mini-btn rec-btn';
-    recBtn.textContent = '● Grabar';
+    recBtn.className = 'mini-btn rec-btn' + (recording ? ' active' : '');
+    recBtn.textContent = recording ? '■ Detener' : '● Grabar';
     recBtn.onclick = () => toggleRecord(recBtn);
     bar.appendChild(recBtn);
+
+    const timer = document.createElement('span');
+    timer.className = 'rec-timer';
+    timer.id = 'rec-timer';
+    timer.textContent = '0:00';
+    bar.appendChild(timer);
 
     root.appendChild(bar);
 
@@ -38,8 +41,9 @@ const ModeRecord = (() => {
       const opt = document.createElement('option'); opt.value = t.id; opt.textContent = t.name;
       sel.appendChild(opt);
     });
+    if (!targetTrack) targetTrack = State.padTracks()[0];
+    sel.value = targetTrack.id;
     sel.onchange = () => { targetTrack = State.trackById(sel.value); };
-    targetTrack = State.trackById(sel.value);
     targetRow.appendChild(sel);
     root.appendChild(targetRow);
 
@@ -48,44 +52,53 @@ const ModeRecord = (() => {
     canvas.width = 900; canvas.height = 160;
     root.appendChild(canvas);
 
-    const syncRow = document.createElement('div');
-    syncRow.className = 'rec-sync';
-    syncRow.innerHTML = `
-      <label><input type="radio" name="syncmode" value="oneshot" checked> One-shot</label>
-      <label><input type="radio" name="syncmode" value="loop"> Loop sincronizado</label>
-      <span>Compases: </span>
-      <select id="rec-bars"><option>1</option><option>2</option><option selected>4</option><option>8</option></select>
-      <button class="mini-btn" id="rec-assign">Asignar al pad</button>
-    `;
-    root.appendChild(syncRow);
+    const infoRow = document.createElement('div');
+    infoRow.className = 'rec-info';
+    infoRow.id = 'rec-info';
+    root.appendChild(infoRow);
 
-    if (lastBuffer) drawWaveform(canvas, lastBuffer);
-
-    root.querySelector('#rec-assign').onclick = assignToPad;
+    if (lastBuffer) {
+      drawWaveform(canvas, lastBuffer);
+      showInfo();
+    }
   }
 
-  async function arm() {
+  async function ensureStream() {
+    if (stream) return stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
       alert('No se pudo acceder al micrófono: ' + e.message);
     }
+    return stream;
   }
 
   async function toggleRecord(btn) {
-    if (!stream) await arm();
-    if (!stream) return;
-    if (recorder && recorder.state === 'recording') {
+    if (recording) {
       recorder.stop();
+      recording = false;
+      clearInterval(timerInterval);
       btn.classList.remove('active');
+      btn.textContent = '● Grabar';
       return;
     }
+    await ensureStream();
+    if (!stream) return;
     chunks = [];
     recorder = new MediaRecorder(stream);
     recorder.ondataavailable = (e) => chunks.push(e.data);
     recorder.onstop = onRecordStop;
     recorder.start();
+    recording = true;
+    recStartTime = performance.now();
     btn.classList.add('active');
+    btn.textContent = '■ Detener';
+    timerInterval = setInterval(() => {
+      const el = document.getElementById('rec-timer');
+      if (!el) return;
+      const secs = Math.floor((performance.now() - recStartTime) / 1000);
+      el.textContent = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+    }, 250);
   }
 
   async function onRecordStop() {
@@ -93,11 +106,61 @@ const ModeRecord = (() => {
     const arrBuf = await blob.arrayBuffer();
     try {
       lastBuffer = await AudioEngine.decodeFile(arrBuf);
-      trimStart = 0; trimEnd = lastBuffer.duration;
+      autoAssign();
       render(root);
     } catch (e) {
       alert('No se pudo decodificar la grabación.');
     }
+  }
+
+  // Ajusta automáticamente la toma al grid: detecta cuántos "compases" (vueltas del loop) caben
+  // y calcula la velocidad de reproducción para que encaje exacto, al estilo looper en vivo.
+  function autoFit(buffer) {
+    const loopSeconds = Clock.stepSeconds() * State.project.patternLength;
+    const loops = Math.max(1, Math.round(buffer.duration / loopSeconds));
+    const isShort = buffer.duration < loopSeconds * 0.6;
+    if (isShort) {
+      return { syncMode: 'oneshot', playbackRate: 1, loops: 0 };
+    }
+    return { syncMode: 'loop', playbackRate: buffer.duration / (loops * loopSeconds), loops };
+  }
+
+  function autoAssign(forceMode) {
+    if (!lastBuffer || !targetTrack) return;
+    let info = autoFit(lastBuffer);
+    if (forceMode === 'oneshot') info = { syncMode: 'oneshot', playbackRate: 1, loops: 0 };
+    if (forceMode === 'loop' && info.syncMode !== 'loop') {
+      const loopSeconds = Clock.stepSeconds() * State.project.patternLength;
+      const loops = Math.max(1, Math.round(lastBuffer.duration / loopSeconds));
+      info = { syncMode: 'loop', playbackRate: lastBuffer.duration / (loops * loopSeconds), loops };
+    }
+    lastInfo = info;
+    targetTrack.sample = {
+      buffer: lastBuffer,
+      name: 'grabación ' + new Date().toLocaleTimeString(),
+      trimStart: 0, trimEnd: lastBuffer.duration,
+      syncMode: info.syncMode, playbackRate: info.playbackRate
+    };
+    document.dispatchEvent(new CustomEvent('sample:loaded', { detail: { track: targetTrack } }));
+
+    // Pa'lante: salta al siguiente pad vacío para que la próxima toma no pise esta.
+    const pads = State.padTracks();
+    const curIdx = pads.findIndex(t => t.id === targetTrack.id);
+    const next = pads.slice(curIdx + 1).find(t => !t.sample) || pads.find(t => !t.sample);
+    if (next) targetTrack = next;
+  }
+
+  function showInfo() {
+    const el = document.getElementById('rec-info');
+    if (!el || !lastInfo) return;
+    const desc = lastInfo.syncMode === 'loop'
+      ? `Loop sincronizado · ${lastInfo.loops} vuelta(s) del grid`
+      : 'One-shot (toma corta, sin estirar)';
+    el.innerHTML = `<span>${desc}</span>
+      <button class="mini-btn" id="force-oneshot">Forzar one-shot</button>
+      <button class="mini-btn" id="force-loop">Forzar loop</button>`;
+    el.querySelector('#force-oneshot').onclick = () => { autoAssign('oneshot'); showInfo(); };
+    el.querySelector('#force-loop').onclick = () => { autoAssign('loop'); showInfo(); };
   }
 
   function drawWaveform(canvas, buffer) {
@@ -121,26 +184,6 @@ const ModeRecord = (() => {
       ctx.lineTo(x, mid + max * mid);
     }
     ctx.stroke();
-  }
-
-  function assignToPad() {
-    if (!lastBuffer || !targetTrack) return;
-    const syncMode = root.querySelector('input[name="syncmode"]:checked').value;
-    const bars = parseInt(root.querySelector('#rec-bars').value, 10);
-    let playbackRate = 1;
-    if (syncMode === 'loop') {
-      const stepsPerBar = State.project.patternLength;
-      const barSeconds = Clock.stepSeconds() * stepsPerBar;
-      const targetDuration = barSeconds * bars;
-      playbackRate = lastBuffer.duration / targetDuration;
-    }
-    targetTrack.sample = {
-      buffer: lastBuffer,
-      name: 'grabación ' + new Date().toLocaleTimeString(),
-      trimStart, trimEnd,
-      syncMode, playbackRate
-    };
-    alert('Muestra asignada a ' + targetTrack.name);
   }
 
   return { render };

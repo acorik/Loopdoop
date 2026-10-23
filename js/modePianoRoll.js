@@ -108,5 +108,10 @@ const ModePianoRoll = (() => {
     return wrap;
   }
 
-  return { render, get currentTrack() { return currentTrack; } };
+  function selectTrack(track) {
+    currentTrack = track;
+    if (root) render(root);
+  }
+
+  return { render, selectTrack, get currentTrack() { return currentTrack; } };
 })();
